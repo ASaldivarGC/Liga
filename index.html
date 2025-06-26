@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Live Team Comparator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* General Body Styles */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f7f6; /* Light background */
+      color: #333;
+      line-height: 1.6;
+    }
+
+    /* Page Title */
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 30px;
+      font-size: 2.5em;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 10px;
+      display: inline-block; /* To make border-bottom only cover text */
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Controls Container */
+    .controls {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      margin-bottom: 30px;
+      display: flex;
+      flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+      gap: 15px; /* Space between elements */
+      align-items: center;
+      justify-content: center; /* Center controls */
+    }
+
+    .controls label {
+      font-weight: bold;
+      color: #555;
+      margin-right: 5px;
+    }
+
+    /* Select and Button Styling */
+    select, button {
+      padding: 10px 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1em;
+      min-width: 150px;
+      box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    }
+
+    select {
+      background-color: #f9f9f9;
+      cursor: pointer;
+    }
+
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    /* Output Section */
+    #output {
+      background-color: #ffffff;
+      padding: 25px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      margin-bottom: 30px;
+      min-height: 100px; /* Give it some minimum height */
+    }
+
+    #output h2 {
+      color: #2c3e50;
+      border-bottom: 1px dashed #ddd;
+      padding-bottom: 10px;
+      margin-top: 0;
+      font-size: 1.8em;
+    }
+
+    #output p {
+      margin: 10px 0;
+      display: flex; /* For aligning logo and text */
+      align-items: center;
+      font-size: 1.1em;
+    }
+
+    #output p img {
+      margin-right: 10px;
+      border-radius: 50%; /* Make logos round */
+      border: 1px solid #eee;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+
+    #output ul {
+      list-style: none; /* Remove default bullet points */
+      padding: 0;
+      margin-top: 15px;
+    }
+
+    #output li {
+      background-color: #ecf0f1;
+      margin-bottom: 8px;
+      padding: 10px 15px;
+      border-radius: 5px;
+      border-left: 5px solid #3498db; /* Accent border */
+    }
+
+    /* Charts Section */
+    #charts {
+      display: flex;
+      flex-wrap: wrap; /* Allow charts to wrap on smaller screens */
+      gap: 30px;
+      margin-top: 20px;
+      justify-content: center; /* Center charts */
+    }
+
+    #charts canvas {
+      background-color: #ffffff;
+      padding: 20px; /* Padding inside the canvas card */
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      flex: 1; /* Allow canvases to grow and shrink */
+      min-width: 300px; /* Minimum width before wrapping */
+      max-width: calc(50% - 15px); /* Max width for two columns with gap */
+      box-sizing: border-box;
+      height: 350px; /* Fixed height for charts for consistency */
+    }
+
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+      .controls {
+        flex-direction: column; /* Stack controls vertically */
+        align-items: stretch; /* Stretch to fill width */
+      }
+      select, button {
+        min-width: unset; /* Remove min-width to allow shrinking */
+        width: 100%; /* Make them take full width */
+      }
+      #charts canvas {
+        max-width: 100%; /* Stack charts vertically on small screens */
+        height: 300px; /* Slightly reduce height on small screens */
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 10px;
+      }
+      h1 {
+        font-size: 2em;
+      }
+      #output, .controls {
+        padding: 15px;
+      }
+      #charts {
+        gap: 20px;
+      }
+    }
+    .match-stats-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 15px;
+  justify-content: center;
+}
+
+.team-stats-column {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  flex: 1;
+  min-width: 280px; /* Adjust as needed */
+  max-width: calc(50% - 10px); /* For two columns */
+  box-sizing: border-box;
+}
+
+.team-stats-column h3 {
+  color: #34495e;
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.team-stats-column ul {
+  list-style: none;
+  padding: 0;
+}
+
+.team-stats-column li {
+  padding: 5px 0;
+  display: flex;
+  justify-content: space-between; /* Align type and value */
+  border-bottom: 1px dotted #ececec;
+}
+
+.team-stats-column li:last-child {
+  border-bottom: none; /* No border for the last item */
+}
+
+.team-stats-column li strong {
+  color: #555;
+  margin-right: 10px; /* Space between label and value */
+}
+
+/* Responsive adjustment for stats grid */
+@media (max-width: 768px) {
+  .team-stats-column {
+    max-width: 100%; /* Stack columns on small screens */
+  }
+}
+/* Styles for Prediction Section */
+.prediction-section {
+  background-color: #e8f5e9; /* Light green background */
+  padding: 25px;
+  border-radius: 8px;
+  margin-top: 30px;
+  border: 1px solid #c8e6c9; /* Green border */
+  box-shadow: 0 4px 8px rgba(0, 150, 0, 0.1); /* Subtle green shadow */
+}
+
+.prediction-section h2 {
+  color: #2e7d32; /* Darker green for heading */
+  border-bottom: 1px dashed #a5d6a7;
+  padding-bottom: 10px;
+  margin-top: 0;
+}
+
+.prediction-section p {
+  font-size: 1.1em;
+  color: #4a4a4a;
+  margin-bottom: 10px;
+}
+
+.prediction-section h3 {
+  font-size: 1.4em;
+  color: #1b5e20; /* Even darker green for final outcome */
+  text-align: center;
+  margin-top: 20px;
+  padding: 10px;
+  background-color: #dcedc8;
+  border-radius: 5px;
+}
+
+.prediction-section .disclaimer {
+  font-size: 0.9em;
+  color: #777;
+  text-align: center;
+  margin-top: 15px;
+}
+
+  </style>
+</head>
+<body>
+  <h1>Live Team Comparator</h1>
+
+  <div class="controls">
+    <label for="league">League:</label>
+    <select id="league" onchange="loadTeams()">
+      <option value="39">Premier League</option>
+      <option value="61">Ligue 1</option>
+      <option value="78">Bundesliga</option>
+      </select>
+
+    <label for="team1">Team 1:</label>
+    <select id="team1"></select>
+
+    <label for="team2">Team 2:</label>
+    <select id="team2"></select>
+
+    <button onclick="compare()">Compare</button>
+  </div>
+
+  <div id="output">
+    <p>Select two teams and click 'Compare' to see their stats!</p>
+  </div>
+  <div id="charts">
+    <canvas id="formChart"></canvas>
+    <canvas id="pointsChart"></canvas>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
