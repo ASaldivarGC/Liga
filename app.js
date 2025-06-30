@@ -130,23 +130,21 @@ async function fetchH2H(t1, t2) {
 /**
  * Fetches the last 5 match results for a given team to determine their form.
  * @param {string} teamId - The ID of the team.
- * @returns {Array} An array of form outcomes ('W', 'L', 'D').
+ * @returns {Array} An array of recent fixture objects.
  */
 async function fetchForm(teamId) {
     try {
-        const res = await fetch(`${BASE}/fixtures?team=${teamId}&last=5`, { headers });
+        // We'll fetch the last 10 matches to give a more comprehensive view,
+        // but you can adjust 'last=5' to any number you prefer.
+        const res = await fetch(`${BASE}/fixtures?team=${teamId}&last=10`, { headers });
         if (!res.ok) {
             const errorBody = await res.text();
             throw new Error(`API error fetching team form (${res.status} ${res.statusText}): ${errorBody.substring(0, 200)}`);
         }
         const json = await res.json();
         if (json.response) {
-            return json.response.map(f => ({
-                vs: f.teams.home.id === Number(teamId) ? f.teams.away.name : f.teams.home.name,
-                outcome: f.teams.home.id === Number(teamId)
-                    ? (f.goals.home > f.goals.away ? 'W' : f.goals.home < f.goals.away ? 'L' : 'D')
-                    : (f.goals.away > f.goals.home ? 'W' : f.goals.away < f.goals.home ? 'L' : 'D')
-            }));
+            // Return the raw response fixtures. We'll process them in compare()
+            return json.response;
         } else {
             console.warn(`No form data found for team ${teamId}.`);
             return [];
@@ -408,41 +406,39 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
     let team1Advantage = 0;
     let team2Advantage = 0;
 
-    // Helper to safely get stat value
+    // Helper to safely get stat value (ensure this function is exactly as in Step 1)
     const getStatValue = (statsArray, type) => {
         const stat = statsArray ? statsArray.find(s => s.type === type) : null;
         if (stat && stat.value !== null) {
-            // Attempt to parse as an integer. If it's a percentage, remove '%' first.
-            // Using parseFloat handles numbers with decimals, though 'Goals' are usually integers.
-            const rawValue = String(stat.value).replace('%', ''); // Ensure it's a string and remove '%'
+            const rawValue = String(stat.value).replace('%', '');
             const parsedValue = parseFloat(rawValue);
             if (!isNaN(parsedValue)) {
                 return parsedValue;
             }
         }
-        return 'N/A'; // Return 'N/A' if value is null, undefined, or not a valid number
+        return 'N/A';
     };
 
     // --- 1. Analyze League Points ---
     const pointsDiff = Math.abs(pts1 - pts2);
     if (pointsDiff > 10) { // Arbitrary threshold for significant point difference
         if (pts1 > pts2) {
-            predictionText += `${team1Name} has a significant advantage in league points. `;
+            predictionText += `${team1Name} tiene una ventaja significativa en puntos de liga. `;
             team1Advantage += 2;
         } else {
-            predictionText += `${team2Name} has a significant advantage in league points. `;
+            predictionText += `${team2Name} tiene una ventaja significativa en puntos de liga. `;
             team2Advantage += 2;
         }
     } else if (pointsDiff > 3) { // Smaller but noticeable difference
         if (pts1 > pts2) {
-            predictionText += `${team1Name} has a slight edge in league points. `;
+            predictionText += `${team1Name} tiene una ligera ventaja en puntos de liga. `;
             team1Advantage += 1;
         } else {
-            predictionText += `${team2Name} has a slight edge in league points. `;
+            predictionText += `${team2Name} tiene una ligera ventaja en puntos de liga. `;
             team2Advantage += 1;
         }
     } else {
-        predictionText += `Both teams are closely matched in league points. `;
+        predictionText += `Ambos equipos están muy igualados en puntos de liga. `;
     }
 
     // --- 2. Analyze Recent Form (Wins in last 5 games) ---
@@ -452,22 +448,22 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
 
     if (formDiff >= 2) { // Arbitrary threshold for significant form difference
         if (form1Wins > form2Wins) {
-            predictionText += `${team1Name} comes into this match with better recent form (more wins in last 5 games). `;
+            predictionText += `${team1Name} llega a este partido con mejor forma reciente (más victorias en los últimos 5 partidos). `;
             team1Advantage += 1.5;
         } else {
-            predictionText += `${team2Name} comes into this match with better recent form (more wins in last 5 games). `;
+            predictionText += `${team2Name} llega a este partido con mejor forma reciente (más victorias en los últimos 5 partidos). `;
             team2Advantage += 1.5;
         }
     } else if (formDiff === 1) {
         if (form1Wins > form2Wins) {
-            predictionText += `${team1Name} has slightly better recent form. `;
+            predictionText += `${team1Name} tiene una forma reciente ligeramente mejor. `;
             team1Advantage += 0.5;
         } else {
-            predictionText += `${team2Name} has slightly better recent form. `;
+            predictionText += `${team2Name} tiene una forma reciente ligeramente mejor. `;
             team2Advantage += 0.5;
         }
     } else {
-        predictionText += `Their recent forms are quite similar. `;
+        predictionText += `Sus formas recientes son bastante similares. `;
     }
 
     // --- 3. Analyze Head-to-Head Record ---
@@ -498,17 +494,17 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
         });
 
         const totalH2H = h2hMatches.length;
-        predictionText += `In ${totalH2H} past head-to-head encounters: ${team1Name} won ${h2hTeam1Wins}, ${team2Name} won ${h2hTeam2Wins}, and there were ${h2hDraws} draws. `;
+        predictionText += `En ${totalH2H} encuentros directos anteriores: ${team1Name} ganó ${h2hTeam1Wins}, ${team2Name} ganó ${h2hTeam2Wins}, y hubo ${h2hDraws} empates. `;
 
         if (h2hTeam1Wins > h2hTeam2Wins + 2) { // Arbitrary threshold for H2H dominance
-            predictionText += `${team1Name} historically dominates this fixture. `;
+            predictionText += `${team1Name} domina históricamente este encuentro. `;
             team1Advantage += 1;
         } else if (h2hTeam2Wins > h2hTeam1Wins + 2) {
-            predictionText += `${team2Name} historically dominates this fixture. `;
+            predictionText += `${team2Name} domina históricamente este encuentro. `;
             team2Advantage += 1;
         }
     } else {
-        predictionText += `There is no significant head-to-head history to consider. `;
+        predictionText += `No hay un historial significativo de encuentros directos a considerar. `;
     }
 
     // --- Insights from Most Recent H2H Match Statistics (if available) ---
@@ -521,18 +517,23 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
         const team1Stats = matchStatistics.find(s => s.team.id === team1Id);
         const team2Stats = matchStatistics.find(s => s.team.id === team2Id);
 
-        let totalGoals = 'N/A';
+        let totalGoals = 0; // Initialize with 0
         let totalShotsOnGoal = 'N/A';
         let totalCorners = 'N/A';
         let totalFouls = 'N/A';
-        let totalPenalties = 'N/A';
+        let totalPenalties = 0; // Initialize with 0
 
-        // Check if both teams have stats before summing
+        // --- FIX FOR TOTAL GOALS: Directly use goals from the fixture object ---
+        if (mostRecentH2HFixtureObject.goals &&
+            typeof mostRecentH2HFixtureObject.goals.home === 'number' &&
+            typeof mostRecentH2HFixtureObject.goals.away === 'number') {
+            totalGoals = mostRecentH2HFixtureObject.goals.home + mostRecentH2HFixtureObject.goals.away;
+        } else {
+            totalGoals = 'N/A'; // Fallback if goal data is malformed or missing
+        }
+
+        // Check if both teams have stats before summing other general stats
         if (team1Stats && team2Stats) {
-            const goals1 = getStatValue(team1Stats.statistics, 'Goals');
-            const goals2 = getStatValue(team2Stats.statistics, 'Goals');
-            if (goals1 !== 'N/A' && goals2 !== 'N/A') totalGoals = goals1 + goals2;
-
             const shots1 = getStatValue(team1Stats.statistics, 'Shots on Goal');
             const shots2 = getStatValue(team2Stats.statistics, 'Shots on Goal');
             if (shots1 !== 'N/A' && shots2 !== 'N/A') totalShotsOnGoal = shots1 + shots2;
@@ -545,43 +546,52 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
             const fouls2 = getStatValue(team2Stats.statistics, 'Fouls');
             if (fouls1 !== 'N/A' && fouls2 !== 'N/A') totalFouls = fouls1 + fouls2;
 
+            // --- FIX FOR PENALTIES: Default to 0 if not found ---
             const penalties1 = getStatValue(team1Stats.statistics, 'Penalties');
             const penalties2 = getStatValue(team2Stats.statistics, 'Penalties');
-            if (penalties1 !== 'N/A' && penalties2 !== 'N/A') totalPenalties = penalties1 + penalties2;
+
+            let sumPenalties = 0;
+            if (penalties1 !== 'N/A') {
+                sumPenalties += penalties1;
+            }
+            if (penalties2 !== 'N/A') {
+                sumPenalties += penalties2;
+            }
+            totalPenalties = sumPenalties; // This will be 0 if both were 'N/A'
         }
 
         detailedPredictionHtml = `
             <h4>Retrospectiva:</h4>
             <ul>
-                <li>Total Goals: ${totalGoals}</li>
-                <li>Total Shots on Goal: ${totalShotsOnGoal}</li>
-                <li>Corner Kicks: ${totalCorners}</li>
-                <li>Fouls Committed: ${totalFouls}</li>
+                <li>Goles Totales: ${totalGoals}</li>
+                <li>Tiros a Puerta Totales: ${totalShotsOnGoal}</li>
+                <li>Saques de Esquina: ${totalCorners}</li>
+                <li>Faltas Cometidas: ${totalFouls}</li>
                 <li>Penalties: ${totalPenalties}</li>
             </ul>
-            <p>Based on their most recent direct encounter for which detailed statistics are available, we might observe a similar pattern in goal-scoring opportunities, set pieces, and physicality in their next match.</p>
+            <p>Basado en su encuentro directo más reciente con estadísticas disponibles, podríamos observar un patrón similar en oportunidades de gol, jugadas a balón parado y fisicalidad en su próximo partido.</p>
         `;
     } else {
-        detailedPredictionHtml = "<p>No detailed match statistics available from past head-to-head encounters to provide further insights into specific match events.</p>";
+        detailedPredictionHtml = "<p>No hay estadísticas detalladas del partido disponibles de encuentros directos pasados para proporcionar más información sobre eventos específicos del partido.</p>";
     }
 
     // --- Final Combined Prediction ---
     let finalOutcome = "";
     if (team1Advantage > team2Advantage + 1) { // Team 1 has a clear advantage
-        finalOutcome = `${team1Name} is favored to win this match.`;
+        finalOutcome = `${team1Name} es favorito para ganar este partido.`;
     } else if (team2Advantage > team1Advantage + 1) { // Team 2 has a clear advantage
-        finalOutcome = `${team2Name} is favored to win this match.`;
+        finalOutcome = `${team2Name} es favorito para ganar este partido.`;
     } else if (team1Advantage > 0.5 || team2Advantage > 0.5) { // One team has a slight edge overall
-        finalOutcome = `${team1Advantage > team2Advantage ? team1Name : team2Name} has a slight edge, but it could be a close game.`;
+        finalOutcome = `${team1Advantage > team2Advantage ? team1Name : team2Name} tiene una ligera ventaja, pero podría ser un partido reñido.`;
     } else { // Very evenly matched
-        finalOutcome = `This looks like a very evenly matched game, a draw is a strong possibility.`;
+        finalOutcome = `Este parece un partido muy igualado, un empate es una fuerte posibilidad.`;
     }
 
     return `
         <p><strong>Basado en toda la información:</strong> ${predictionText}</p>
         ${detailedPredictionHtml}
         <h3>Predicción: ${finalOutcome}</h3>
-        <p class="disclaimer"><em>(Disclaimer: La información proporcionada no es un dato exacto, los partidos pueden ser impredecibles!)</em></p>
+        <p class="disclaimer"><em>(Descargo de responsabilidad: ¡La información proporcionada no es un dato exacto, los partidos pueden ser impredecibles!)</em></p>
     `;
 }
 
@@ -610,12 +620,11 @@ async function compare() {
 
     try {
         // Fetch all necessary data concurrently using Promise.all
-        // Pass season to fetchStandings
-        const [stand, h2hRaw, form1, form2] = await Promise.all([
+        const [stand, h2hRaw, form1Raw, form2Raw] = await Promise.all([ // Renamed form1/2 to form1Raw/form2Raw
             fetchStandings(league, season),
             fetchH2H(t1, t2),
-            fetchForm(t1),
-            fetchForm(t2),
+            fetchForm(t1), // This now returns full fixture objects
+            fetchForm(t2), // This now returns full fixture objects
         ]);
 
         const a = stand.find(r => r.team.id === Number(t1));
@@ -626,8 +635,8 @@ async function compare() {
         console.log("Team 1 ID:", t1, "Team 2 ID:", t2);
         console.log("Full Standings Data (raw):", stand);
         console.log("Head-to-Head Data (raw):", h2hRaw);
-        console.log("Form Team 1 (raw):", form1);
-        console.log("Form Team 2 (raw):", form2);
+        console.log("Form Team 1 (raw - full fixtures):", form1Raw); // Log raw fixtures
+        console.log("Form Team 2 (raw - full fixtures):", form2Raw); // Log raw fixtures
         console.log("Team 1 Standings Found:", !!a);
         console.log("Team 2 Standings Found:", !!b);
 
@@ -635,11 +644,10 @@ async function compare() {
         out.innerHTML = ''; // Clear previous output before displaying new results
 
         let matchStatistics = [];
-        let mostRecentH2HFixtureWithStats = null; // New variable to store the fixture that actually has stats
+        let mostRecentH2HFixtureWithStats = null; // Variable to store the fixture that actually has stats
 
         if (h2hRaw && h2hRaw.length > 0) {
-            // The API usually returns H2H matches in reverse chronological order (most recent first).
-            // Iterate through them to find the first one that has statistics.
+            // Iterate through H2H matches to find the first one that has statistics.
             for (const fixture of h2hRaw) {
                 const currentFixtureId = fixture.fixture.id;
                 console.log(`Checking fixture ID ${currentFixtureId} (Date: ${new Date(fixture.fixture.date).toLocaleDateString()}) for statistics...`);
@@ -666,7 +674,56 @@ async function compare() {
 
 
         if (a && b) {
-            const h2hListHtml = h2hForDisplay.length > 0 ? // Use h2hForDisplay here
+            // Helper function to render a team's recent matches for display
+            const renderRecentMatches = (teamName, teamId, recentFixtures) => {
+                if (!recentFixtures || recentFixtures.length === 0) {
+                    return `<p>No recent matches found for ${teamName}.</p>`;
+                }
+
+                const matchesHtml = recentFixtures.map(f => {
+                    const isHome = f.teams.home.id === Number(teamId);
+                    const opponentName = isHome ? f.teams.away.name : f.teams.home.name;
+                    const teamGoals = isHome ? f.goals.home : f.goals.away;
+                    const opponentGoals = isHome ? f.goals.away : f.goals.home;
+                    const matchDate = new Date(f.fixture.date).toLocaleDateString();
+                    const resultClass = teamGoals > opponentGoals ? 'result-win' : (teamGoals < opponentGoals ? 'result-loss' : 'result-draw');
+                    const location = isHome ? '(H)' : '(A)';
+
+                    return `
+                        <div class="recent-match-item ${resultClass}">
+                            <span class="match-date">${matchDate}</span>
+                            <span class="match-details">${location} vs ${opponentName}</span>
+                            <span class="match-score">${teamGoals}-${opponentGoals}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <h3>${teamName} Recent Matches</h3>
+                    <div class="recent-matches-container">
+                        ${matchesHtml}
+                    </div>
+                `;
+            };
+
+            // Generate HTML for recent matches
+            const team1RecentMatchesHtml = renderRecentMatches(a.team.name, t1, form1Raw);
+            const team2RecentMatchesHtml = renderRecentMatches(b.team.name, t2, form2Raw);
+
+            // Extract simplified form (W/D/L) for the chart and prediction function
+            // This is crucial because generatePrediction and drawCharts expect this simpler format
+            const form1ForChartAndPrediction = form1Raw.map(f => ({
+                outcome: f.teams.home.id === Number(t1)
+                    ? (f.goals.home > f.goals.away ? 'W' : f.goals.home < f.goals.away ? 'L' : 'D')
+                    : (f.goals.away > f.goals.home ? 'W' : f.goals.away < f.goals.home ? 'L' : 'D')
+            }));
+            const form2ForChartAndPrediction = form2Raw.map(f => ({
+                outcome: f.teams.home.id === Number(t2)
+                    ? (f.goals.home > f.goals.away ? 'W' : f.goals.home < f.goals.away ? 'L' : 'D')
+                    : (f.goals.away > f.goals.home ? 'W' : f.goals.away < f.goals.home ? 'L' : 'D')
+            }));
+
+            const h2hListHtml = h2hForDisplay.length > 0 ?
                 `<div class="h2h-grid">${h2hForDisplay.map(f => `
                     <div class="h2h-item">
                         ${f.teams.home.name} ${f.goals.home}-${f.goals.away} ${f.teams.away.name}
@@ -704,17 +761,28 @@ async function compare() {
                     </div>
                 `;
             } else {
-                // MODIFIED MESSAGE HERE:
                 statsHtml = '<p>No detailed statistics found for any head-to-head matches between these teams. This could be because statistics are not provided by the API for these specific fixtures (e.g., very old, future, or lower-tier matches), or there was an issue fetching them.</p>';
             }
 
-            // Pass the `mostRecentH2HFixtureWithStats` object to `generatePrediction` as a new 9th argument
-            const predictionHtml = generatePrediction(a.team.name, b.team.name, a.points, b.points, form1, form2, h2hForDisplay, matchStatistics, mostRecentH2HFixtureWithStats);
+            // Pass the *converted* form data to generatePrediction
+            const predictionHtml = generatePrediction(a.team.name, b.team.name, a.points, b.points, form1ForChartAndPrediction, form2ForChartAndPrediction, h2hForDisplay, matchStatistics, mostRecentH2HFixtureWithStats);
 
             out.innerHTML = `
                 <h2>Posición</h2>
                 <p><img src="${a.team.logo}" width="30"> ${a.team.name}: ${a.rank} (${a.points} pts)</p>
                 <p><img src="${b.team.logo}" width="30"> ${b.team.name}: ${b.rank} (${b.points} pts)</p>
+
+                <div class="recent-performance-section">
+                    <h2>Partidos Recientes</h2>
+                    <div class="recent-performance-grid">
+                        <div class="team-recent-matches">
+                            ${team1RecentMatchesHtml}
+                        </div>
+                        <div class="team-recent-matches">
+                            ${team2RecentMatchesHtml}
+                        </div>
+                    </div>
+                </div>
 
                 <h2>Partidos</h2>
                 ${h2hListHtml}
@@ -726,7 +794,8 @@ async function compare() {
                   ${predictionHtml}
                 </div>
             `;
-            drawCharts(form1, form2, a.points, b.points); // Draw charts after all data is ready
+            // Pass the *converted* form data to drawCharts
+            drawCharts(form1ForChartAndPrediction, form2ForChartAndPrediction, a.points, b.points);
         } else {
             out.innerHTML = `
                 <h2>Comparar Resultados</h2>
