@@ -325,6 +325,104 @@
         text-overflow: unset; /* Remove ellipsis */
     }
 }
+/* General Layout for comparison */
+#output {
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Space between major sections */
+}
+
+/* Styles for Recent Performance Section */
+.recent-performance-section {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.recent-performance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Two columns for two teams */
+    gap: 20px;
+}
+
+.team-recent-matches h3 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+.recent-matches-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Space between individual match items */
+}
+
+.recent-match-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 0.9em;
+}
+
+.recent-match-item .match-date {
+    flex-basis: 25%;
+    font-weight: bold;
+}
+
+.recent-match-item .match-details {
+    flex-basis: 45%;
+    text-align: left;
+}
+
+.recent-match-item .match-score {
+    flex-basis: 20%;
+    text-align: right;
+    font-weight: bold;
+}
+
+/* Color coding for results */
+.recent-match-item.result-win {
+    background-color: #e6ffe6; /* Light green */
+    border: 1px solid #66cc66;
+}
+
+.recent-match-item.result-draw {
+    background-color: #ffffcc; /* Light yellow */
+    border: 1px solid #cccc66;
+}
+
+.recent-match-item.result-loss {
+    background-color: #ffe6e6; /* Light red */
+    border: 1px solid #cc6666;
+}
+
+/* General H2H grid */
+.h2h-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.h2h-item {
+    background-color: #eaf2f8;
+    border: 1px solid #d4e6f1;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 0.95em;
+}
+
+.h2h-date {
+    font-size: 0.8em;
+    color: #666;
+    margin-left: 5px;
+}
 
   </style>
 </head>
@@ -353,6 +451,7 @@
 
     <button onclick="compare()">Comparar</button>
   </div>
+
   <div id="output">
     <p>Selecciona una Liga, Temporada, y dos equipos para comparar!</p> </div>
   <div id="charts">
