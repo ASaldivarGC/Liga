@@ -7,17 +7,11 @@ const API_KEY = 'a0a2237e06c074bb980edb3e952c44d7'; // IMPORTANT: Replace with y
 const BASE = 'https://v3.football.api-sports.io';
 const headers = { 'x-apisports-key': API_KEY };
 
-// Define the season you wish to fetch data for.
-// NOTE: Free API-Sports plans often limit access to recent seasons (e.g., only up to 2023).
-// If you have a paid plan, update this to '2025' or '2026' for current/upcoming seasons.
-const SEASON_TO_FETCH = '2023';
-
 // --- API Fetch Functions ---
 
 /**
  * Fetches a list of all available leagues from the API.
- * Filters for 'league' type to exclude cups or other competition formats.
- * @returns {Array} An array of league objects.
+ * @returns {Array} An array of league objects, potentially nested.
  */
 async function fetchAllLeagues() {
     try {
@@ -29,22 +23,20 @@ async function fetchAllLeagues() {
             console.error(`API response NOT OK: ${res.status} ${res.statusText}. Body: ${errorBody.substring(0, 200)}`);
             throw new Error(`API error fetching leagues (${res.status} ${res.statusText}): ${errorBody.substring(0, 200)}`);
         }
-        
+
         const data = await res.json();
         console.log("Raw API response for /leagues:", data);
 
         if (data.response && data.response.length > 0) {
             console.log("Total items in data.response:", data.response.length);
+            // Relaxed filter: only check for valid league.id
+            const filteredLeagues = data.response.filter(l => l.league && l.league.id !== null);
 
-            // *** CHANGE THIS LINE: RELAX THE FILTER ***
-            const filteredLeagues = data.response.filter(l => l.id !== null); // Removed l.type === 'league'
-            // *******************************************
-
-            console.log("Filtered leagues (id!=null):", filteredLeagues);
+            console.log("Filtered leagues (l.league.id != null):", filteredLeagues);
             console.log("Number of filtered leagues:", filteredLeagues.length);
 
             if (filteredLeagues.length === 0) {
-                console.warn("No leagues found after applying filter (id is null). This is unexpected if raw data has results.");
+                console.warn("No leagues found after applying filter (l.league.id is null).");
             }
             return filteredLeagues;
         } else {
@@ -58,13 +50,15 @@ async function fetchAllLeagues() {
 }
 
 /**
- * Fetches teams for a specific league and predefined season.
- * @param {string} league - The ID of the league.
+ * Fetches teams for a specific league and season.
+ * @param {string} leagueId - The ID of the league.
+ * @param {string} season - The year of the season.
  * @returns {Array} An array of team objects.
  */
-async function fetchTeams(league) {
+async function fetchTeams(leagueId, season) {
     try {
-        const res = await fetch(`${BASE}/teams?league=${league}&season=${SEASON_TO_FETCH}`, { headers });
+        console.log(`Fetching teams for league: ${leagueId}, season: ${season}`);
+        const res = await fetch(`${BASE}/teams?league=${leagueId}&season=${season}`, { headers });
         if (!res.ok) {
             const errorBody = await res.text();
             throw new Error(`API error fetching teams (${res.status} ${res.statusText}): ${errorBody.substring(0, 200)}`);
@@ -73,7 +67,7 @@ async function fetchTeams(league) {
         if (data.response && data.response.length > 0) {
             return data.response.map(t => ({ id: t.team.id, name: t.team.name, logo: t.team.logo }));
         } else {
-            console.warn(`No teams found for league ${league} in season ${SEASON_TO_FETCH}. Check your API plan or season ID.`);
+            console.warn(`No teams found for league ${leagueId} in season ${season}. Check your API plan or season ID.`);
             return [];
         }
     } catch (error) {
@@ -83,13 +77,15 @@ async function fetchTeams(league) {
 }
 
 /**
- * Fetches standings for a specific league and predefined season.
- * @param {string} league - The ID of the league.
+ * Fetches standings for a specific league and season.
+ * @param {string} leagueId - The ID of the league.
+ * @param {string} season - The year of the season.
  * @returns {Array} An array of standing entry objects.
  */
-async function fetchStandings(league) {
+async function fetchStandings(leagueId, season) {
     try {
-        const res = await fetch(`${BASE}/standings?league=${league}&season=${SEASON_TO_FETCH}`, { headers });
+        console.log(`Fetching standings for league: ${leagueId}, season: ${season}`);
+        const res = await fetch(`${BASE}/standings?league=${leagueId}&season=${season}`, { headers });
         if (!res.ok) {
             const errorBody = await res.text();
             throw new Error(`API error fetching standings (${res.status} ${res.statusText}): ${errorBody.substring(0, 200)}`);
@@ -101,7 +97,7 @@ async function fetchStandings(league) {
             data.response[0].league.standings.length > 0) {
             return data.response[0].league.standings[0];
         } else {
-            console.warn(`No standings found for league ${league} in season ${SEASON_TO_FETCH}. Check your API plan or season ID.`);
+            console.warn(`No standings found for league ${leagueId} in season ${season}. Check your API plan or season ID.`);
             return [];
         }
     } catch (error) {
@@ -189,75 +185,155 @@ async function fetchMatchStatistics(fixtureId) {
 // --- UI Logic Functions ---
 
 /**
- * Populates the initial league dropdown when the page loads.
+ * Populates the initial league and season dropdowns when the page loads.
  */
 async function initialLoad() {
     const leagueSelect = document.getElementById('league');
-    leagueSelect.innerHTML = '<option value="">Loading Leagues...</option>'; // Placeholder while loading
+    const seasonSelect = document.getElementById('season'); // Get the new season select element
+
+    leagueSelect.innerHTML = '<option value="">Cargando Ligas...</option>'; // Placeholder while loading
+    seasonSelect.innerHTML = '<option value="">Cargando Temporadas...</option>'; // Placeholder for seasons
 
     try {
-        const allLeagues = await fetchAllLeagues();
-        leagueSelect.innerHTML = '<option value="">Select a League</option>'; // Reset with default option
-        allLeagues.sort((a, b) => {
-            const nameA = a.league.name ?? 'Unnamed League'; // Use fallback for robust sorting
-            const nameB = b.league.name ?? 'Unnamed League'; // Use fallback for robust sorting
-            return nameA.localeCompare(nameB); // Case-insensitive and handles special characters
-        });
-        allLeagues.forEach(l => {
-            // Access properties correctly from the nested 'league' and 'country' objects
-            const leagueId = l.league.id;
-            const leagueName = l.league.name ?? 'Unnamed League'; // Fallback for name
-            const countryName = l.country.name ?? 'Unknown Country'; // Fallback for country name
+        let allLeagues = await fetchAllLeagues();
+        leagueSelect.innerHTML = '<option value="">Selcciona una Liga</option>'; // Reset with default option
 
-            // Create the option element with the correct values
+        // Sort the leagues alphabetically by name
+        allLeagues.sort((a, b) => {
+            const nameA = a.league.name ?? 'Unnamed League';
+            const nameB = b.league.name ?? 'Unnamed League';
+            return nameA.localeCompare(nameB);
+        });
+
+        const availableSeasons = new Set();
+        let latestCurrentSeason = null; // To find the most recent 'current: true' season
+
+        allLeagues.forEach(l => {
+            const leagueId = l.league.id;
+            const leagueName = l.league.name ?? 'Unnamed League';
+            // Robust country name fallback: check if l.country exists first
+            const countryName = l.country ? (l.country.name ?? 'Unknown Country') : 'Unknown Country';
+
+            // Add the option to the league dropdown
             const option = new Option(`${leagueName} (${countryName})`, leagueId);
             leagueSelect.add(option);
+
+            // Collect seasons for the season dropdown
+            l.seasons.forEach(s => {
+                // Ensure the season is within a reasonable range (e.g., 2010 to current year + 1)
+                // Adjust this range based on your API plan's coverage if needed.
+                if (s.year >= 2010 && s.year <= (new Date().getFullYear() + 1)) {
+                    availableSeasons.add(s.year);
+                }
+                // Track the latest 'current' season to set as default
+                if (s.current) {
+                    if (latestCurrentSeason === null || s.year > latestCurrentSeason) {
+                        latestCurrentSeason = s.year;
+                    }
+                }
+            });
         });
+
+        // Populate and sort the season dropdown
+        const sortedSeasons = Array.from(availableSeasons).sort((a, b) => b - a); // Sort descending (newest first)
+        seasonSelect.innerHTML = '<option value="">Select a Season</option>'; // Reset
+        sortedSeasons.forEach(year => {
+            seasonSelect.add(new Option(year, year));
+        });
+
+        // Set default selected season (prioritize latest 'current' season, then current year, then latest available)
+        let defaultSeason = null;
+        const currentYear = new Date().getFullYear();
+
+        if (latestCurrentSeason && sortedSeasons.includes(latestCurrentSeason)) {
+            defaultSeason = latestCurrentSeason;
+        } else if (sortedSeasons.includes(currentYear)) {
+            defaultSeason = currentYear;
+        } else if (sortedSeasons.length > 0) {
+            defaultSeason = sortedSeasons[0]; // Fallback to the latest available season
+        }
+
+        if (defaultSeason) {
+            seasonSelect.value = defaultSeason;
+        }
+
 
         // Optionally, auto-select a default league and load its teams after populating
         // Example: Select Premier League (ID 39) if available.
-        // NOTE: The ID 39 refers to the l.league.id, not just l.id
-        if (allLeagues.some(l => l.league.id == '39')) { // Use l.league.id here
-             leagueSelect.value = '39';
-             await loadTeams(); // Load teams for the pre-selected league
+        // Check if there's a selected league and season before trying to load teams
+        const defaultLeagueId = '39'; // Premier League ID
+        const premierLeagueAvailable = allLeagues.some(l => l.league.id == defaultLeagueId);
+
+        if (premierLeagueAvailable && defaultSeason) {
+             leagueSelect.value = defaultLeagueId;
+             await loadTeams(); // Load teams for the pre-selected league and default season
+        } else if (defaultSeason && allLeagues.length > 0) {
+            // If Premier League isn't available, but we have leagues and a default season,
+            // select the first available league and load teams.
+            leagueSelect.value = allLeagues[0].league.id;
+            await loadTeams();
         }
 
+
     } catch (error) {
-        console.error("Error loading leagues:", error);
+        console.error("Error loading leagues and seasons:", error);
         leagueSelect.innerHTML = '<option value="">Failed to load leagues</option>';
-        alert("Failed to load leagues. Check your API key and internet connection.");
+        seasonSelect.innerHTML = '<option value="">Failed to load seasons</option>';
+        alert("Failed to load leagues and seasons. Check your API key and internet connection.");
     }
 }
 
 
 /**
- * Loads teams for the currently selected league and populates the team dropdowns.
+ * Loads teams for the currently selected league and season and populates the team dropdowns.
  */
 async function loadTeams() {
     const league = document.getElementById('league').value;
-    if (!league) {
-        // Clear team dropdowns if no league is selected
-        ['team1', 'team2'].forEach(id => {
-            const sel = document.getElementById(id);
-            sel.innerHTML = '<option value="">Select Team</option>';
-        });
-        return; // Exit if no league is selected
+    const season = document.getElementById('season').value; // Get selected season
+
+    const team1Select = document.getElementById('team1');
+    const team2Select = document.getElementById('team2');
+
+    // Clear previous teams
+    team1Select.innerHTML = '<option value="">Select Team</option>';
+    team2Select.innerHTML = '<option value="">Select Team</option>';
+
+    // Clear charts and output if conditions aren't met
+    if (formChartInstance) formChartInstance.destroy();
+    if (pointsChartInstance) pointsChartInstance.destroy();
+    document.getElementById('output').innerHTML = `
+        <h2>Comparativa de dos equipos</h2>
+        <p>Selecciona ana liga, una temporada, y dos equipospara compararlos, ver partidos recientes, y sus estadisticas!</p>
+    `;
+
+
+    if (!league || !season) {
+        console.log("League or Season not selected. Not loading teams.");
+        return; // Exit if no league or season is selected
     }
 
-    console.log("Loading teams for league:", league);
+    console.log("Loading teams for league:", league, "and season:", season);
 
     try {
-        const teams = await fetchTeams(league);
+        const teams = await fetchTeams(league, season); // Pass season to fetchTeams
         console.log("Teams received:", teams);
 
-        ['team1', 'team2'].forEach(id => {
-            const sel = document.getElementById(id);
-            sel.innerHTML = '<option value="">Select Team</option>'; // Clear and add default option
-            teams.forEach(t => sel.add(new Option(t.name, t.id)));
-        });
+        if (teams.length > 0) {
+            teams.forEach(t => {
+                team1Select.add(new Option(t.name, t.id));
+                team2Select.add(new Option(t.name, t.id));
+            });
+        } else {
+            console.warn(`No teams found for league ${league} in season ${season}.`);
+            // Add a message to the team dropdowns if no teams are found
+            team1Select.innerHTML = '<option value="">No Teams Found</option>';
+            team2Select.innerHTML = '<option value="">No Teams Found</option>';
+        }
     } catch (error) {
         console.error("Error loading teams:", error);
-        alert("Failed to load teams for the selected league. Data might not be available for the current season or your API key is invalid.");
+        alert("Failed to load teams for the selected league and season. Data might not be available or your API key is invalid.");
+        team1Select.innerHTML = '<option value="">Error Loading Teams</option>';
+        team2Select.innerHTML = '<option value="">Error Loading Teams</option>';
     }
 }
 
@@ -322,11 +398,12 @@ function drawCharts(form1, form2, pts1, pts2) {
  * @param {number} pts2 - Points of Team 2.
  * @param {Array} form1 - Recent form (W/L/D) of Team 1.
  * @param {Array} form2 - Recent form (W/L/D) of Team 2.
- * @param {Array} h2hMatches - Head-to-head match history.
- * @param {Array} matchStatistics - Detailed statistics of the most recent H2H match.
+ * @param {Array} h2hMatches - Head-to-head match history (full list for H2H record analysis).
+ * @param {Array} matchStatistics - Detailed statistics of the *most recent available* H2H match.
+ * @param {Object} mostRecentH2HFixtureObject - The *fixture object* for the match whose statistics are provided.
  * @returns {string} HTML string containing the prediction.
  */
-function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hMatches, matchStatistics) {
+function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hMatches, matchStatistics, mostRecentH2HFixtureObject) {
     let predictionText = "";
     let team1Advantage = 0;
     let team2Advantage = 0;
@@ -334,7 +411,16 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
     // Helper to safely get stat value
     const getStatValue = (statsArray, type) => {
         const stat = statsArray ? statsArray.find(s => s.type === type) : null;
-        return stat && stat.value !== null ? stat.value : 'N/A';
+        if (stat && stat.value !== null) {
+            // Attempt to parse as an integer. If it's a percentage, remove '%' first.
+            // Using parseFloat handles numbers with decimals, though 'Goals' are usually integers.
+            const rawValue = String(stat.value).replace('%', ''); // Ensure it's a string and remove '%'
+            const parsedValue = parseFloat(rawValue);
+            if (!isNaN(parsedValue)) {
+                return parsedValue;
+            }
+        }
+        return 'N/A'; // Return 'N/A' if value is null, undefined, or not a valid number
     };
 
     // --- 1. Analyze League Points ---
@@ -425,10 +511,10 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
         predictionText += `There is no significant head-to-head history to consider. `;
     }
 
-    // --- Insights from Most Recent H2H Match Statistics ---
+    // --- Insights from Most Recent H2H Match Statistics (if available) ---
     let detailedPredictionHtml = '';
-    if (matchStatistics && matchStatistics.length > 0) {
-        // Ensure team IDs are numbers for comparison with matchStatistics.find
+    // Use mostRecentH2HFixtureObject to get the correct match details for the statistics
+    if (matchStatistics && matchStatistics.length > 0 && mostRecentH2HFixtureObject) {
         const team1Id = Number(document.getElementById('team1').value);
         const team2Id = Number(document.getElementById('team2').value);
 
@@ -465,7 +551,7 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
         }
 
         detailedPredictionHtml = `
-            <h4>Insights from Last H2H Match:</h4>
+            <h4>Retrospectiva:</h4>
             <ul>
                 <li>Total Goals: ${totalGoals}</li>
                 <li>Total Shots on Goal: ${totalShotsOnGoal}</li>
@@ -473,7 +559,7 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
                 <li>Fouls Committed: ${totalFouls}</li>
                 <li>Penalties: ${totalPenalties}</li>
             </ul>
-            <p>Based on their most recent direct encounter, we might observe a similar pattern in goal-scoring opportunities, set pieces, and physicality in their next match.</p>
+            <p>Based on their most recent direct encounter for which detailed statistics are available, we might observe a similar pattern in goal-scoring opportunities, set pieces, and physicality in their next match.</p>
         `;
     } else {
         detailedPredictionHtml = "<p>No detailed match statistics available from past head-to-head encounters to provide further insights into specific match events.</p>";
@@ -492,10 +578,10 @@ function generatePrediction(team1Name, team2Name, pts1, pts2, form1, form2, h2hM
     }
 
     return `
-        <p><strong>Based on overall stats:</strong> ${predictionText}</p>
+        <p><strong>Basado en toda la información:</strong> ${predictionText}</p>
         ${detailedPredictionHtml}
-        <h3>Match Outcome Prediction: ${finalOutcome}</h3>
-        <p class="disclaimer"><em>(Disclaimer: This is a simplified, rule-based prediction based on limited available data, and should not be used for betting purposes. Football matches are highly unpredictable!)</em></p>
+        <h3>Predicción: ${finalOutcome}</h3>
+        <p class="disclaimer"><em>(Disclaimer: La información proporcionada no es un dato exacto, los partidos pueden ser impredecibles!)</em></p>
     `;
 }
 
@@ -507,146 +593,161 @@ async function compare() {
     const league = document.getElementById('league').value;
     const t1 = document.getElementById('team1').value;
     const t2 = document.getElementById('team2').value;
+    const season = document.getElementById('season').value; // Get selected season
 
-    const out = document.getElementById('output'); // Get output element once
+    const out = document.getElementById('output');
 
-    // Basic input validation: ensure both teams are selected
-    if (!league || !t1 || !t2) {
+    // Basic input validation: ensure all inputs are selected
+    if (!league || !t1 || !t2 || !season) {
         out.innerHTML = `
-            <h2>Comparison Error</h2>
-            <p>Please select a League, Team 1, and Team 2 to perform a comparison.</p>
+            <h2>Error de Comparativa</h2>
+            <p>Please select a League, a Season, Team 1, and Team 2 to perform a comparison.</p>
         `;
         if (formChartInstance) formChartInstance.destroy();
         if (pointsChartInstance) pointsChartInstance.destroy();
-        return; // Stop execution if inputs are not valid
+        return;
     }
 
     try {
         // Fetch all necessary data concurrently using Promise.all
-        const [stand, h2h, form1, form2] = await Promise.all([
-            fetchStandings(league),
+        // Pass season to fetchStandings
+        const [stand, h2hRaw, form1, form2] = await Promise.all([
+            fetchStandings(league, season),
             fetchH2H(t1, t2),
             fetchForm(t1),
             fetchForm(t2),
         ]);
 
-        // Find the standing data for each selected team
         const a = stand.find(r => r.team.id === Number(t1));
         const b = stand.find(r => r.team.id === Number(t2));
 
-        // --- Debugging Logs (Optional, remove in production) ---
         console.log("League ID selected:", league);
+        console.log("Season selected:", season);
         console.log("Team 1 ID:", t1, "Team 2 ID:", t2);
         console.log("Full Standings Data (raw):", stand);
-        console.log("Head-to-Head Data (raw):", h2h);
+        console.log("Head-to-Head Data (raw):", h2hRaw);
         console.log("Form Team 1 (raw):", form1);
         console.log("Form Team 2 (raw):", form2);
-        console.log("Team 1 Standings Found:", !!a); // !!a converts to boolean
+        console.log("Team 1 Standings Found:", !!a);
         console.log("Team 2 Standings Found:", !!b);
-        // --- End Debugging Logs ---
 
 
         out.innerHTML = ''; // Clear previous output before displaying new results
 
-        // Check if both teams' standings data were successfully found
-        if (a && b) {
-            // Fetch and Process Match Statistics for the most recent H2H match
-            let matchStatistics = [];
-            if (h2h && h2h.length > 0) {
-                // API-Sports usually returns H2H fixtures chronologically, most recent first.
-                // We'll take the first one (index 0) to get its statistics.
-                const mostRecentFixtureId = h2h[0].fixture.id;
-                console.log(`Fetching statistics for most recent H2H fixture: ${mostRecentFixtureId}`);
-                matchStatistics = await fetchMatchStatistics(mostRecentFixtureId);
-                console.log("Match Statistics (raw):", matchStatistics);
-            } else {
-                console.log("No head-to-head matches found, skipping detailed statistics fetch.");
-            }
+        let matchStatistics = [];
+        let mostRecentH2HFixtureWithStats = null; // New variable to store the fixture that actually has stats
 
-            // Build the H2H matches list HTML
-            const h2hListHtml = h2h.length > 0 ?
-                `<ul>${h2h.map(f => `<li>${f.teams.home.name} ${f.goals.home}-${f.goals.away} ${f.teams.away.name} (${new Date(f.fixture.date).toLocaleDateString()})</li>`).join('')}</ul>` :
+        if (h2hRaw && h2hRaw.length > 0) {
+            // The API usually returns H2H matches in reverse chronological order (most recent first).
+            // Iterate through them to find the first one that has statistics.
+            for (const fixture of h2hRaw) {
+                const currentFixtureId = fixture.fixture.id;
+                console.log(`Checking fixture ID ${currentFixtureId} (Date: ${new Date(fixture.fixture.date).toLocaleDateString()}) for statistics...`);
+                
+                const stats = await fetchMatchStatistics(currentFixtureId); // Attempt to fetch stats for this fixture
+
+                if (stats && stats.length > 0) {
+                    // Found a fixture with statistics!
+                    mostRecentH2HFixtureWithStats = fixture; // Store the fixture object
+                    matchStatistics = stats; // Store its statistics
+                    console.log(`SUCCESS: Found statistics for fixture ID: ${currentFixtureId}. Date: ${new Date(fixture.fixture.date).toLocaleDateString()}`);
+                    break; // Stop at the first (most recent) match that has stats
+                } else {
+                    console.log(`No statistics found for fixture ID ${currentFixtureId}. Trying older match...`);
+                }
+            }
+        } else {
+            console.log("No head-to-head matches found.");
+        }
+
+        // Now, create a *copy* of h2hRaw and sort it for display purposes (oldest first)
+        const h2hForDisplay = [...h2hRaw]; // Create a shallow copy
+        h2hForDisplay.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+
+
+        if (a && b) {
+            const h2hListHtml = h2hForDisplay.length > 0 ? // Use h2hForDisplay here
+                `<div class="h2h-grid">${h2hForDisplay.map(f => `
+                    <div class="h2h-item">
+                        ${f.teams.home.name} ${f.goals.home}-${f.goals.away} ${f.teams.away.name}
+                        <span class="h2h-date">(${new Date(f.fixture.date).toLocaleDateString()})</span>
+                    </div>
+                `).join('')}</div>` :
                 '<p>No head-to-head matches found.</p>';
 
-            // Build the Match Statistics HTML section
             let statsHtml = '';
-            // Ensure there are statistics and at least one H2H match to reference h2h[0]
-            if (matchStatistics.length > 0 && h2h.length > 0) {
-                const fixtureHomeTeamName = h2h[0].teams.home.name;
-                const fixtureAwayTeamName = h2h[0].teams.away.name;
+            // Ensure both matchStatistics has data AND mostRecentH2HFixtureWithStats is a valid object
+            if (matchStatistics.length > 0 && mostRecentH2HFixtureWithStats) {
+                const fixtureHomeTeamName = mostRecentH2HFixtureWithStats.teams.home.name;
+                const fixtureAwayTeamName = mostRecentH2HFixtureWithStats.teams.away.name;
 
-                // Pass the matchStatistics to generatePrediction
                 statsHtml = `
-                    <h2>Most Recent H2H Match Statistics</h2>
-                    <p>Match: ${fixtureHomeTeamName} ${h2h[0].goals.home}-${h2h[0].goals.away} ${fixtureAwayTeamName} on ${new Date(h2h[0].fixture.date).toLocaleDateString()}</p>
+                    <h2>Estadística del partido más reciente(Con información)</h2>
+                    <p>Partido: ${fixtureHomeTeamName} ${mostRecentH2HFixtureWithStats.goals.home}-${mostRecentH2HFixtureWithStats.goals.away} ${fixtureAwayTeamName} on ${new Date(mostRecentH2HFixtureWithStats.fixture.date).toLocaleDateString()}</p>
                     <div class="match-stats-grid">
                       <div class="team-stats-column">
                         <h3>${fixtureHomeTeamName}</h3>
                         <ul>
-                          ${matchStatistics.find(s => s.team.id === h2h[0].teams.home.id) && matchStatistics.find(s => s.team.id === h2h[0].teams.home.id).statistics
-                            ? matchStatistics.find(s => s.team.id === h2h[0].teams.home.id).statistics.map(s => `<li><strong>${s.type}:</strong> ${s.value !== null ? s.value : 'N/A'}</li>`).join('')
-                            : '<li>No detailed stats available.</li>'}
+                          ${matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.home.id) && matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.home.id).statistics
+                            ? matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.home.id).statistics.map(s => `<li><strong>${s.type}:</strong> ${s.value !== null ? s.value : 'N/A'}</li>`).join('')
+                            : '<li>No detailed stats available for this team.</li>'}
                         </ul>
                       </div>
                       <div class="team-stats-column">
                         <h3>${fixtureAwayTeamName}</h3>
                         <ul>
-                          ${matchStatistics.find(s => s.team.id === h2h[0].teams.away.id) && matchStatistics.find(s => s.team.id === h2h[0].teams.away.id).statistics
-                            ? matchStatistics.find(s => s.team.id === h2h[0].teams.away.id).statistics.map(s => `<li><strong>${s.type}:</strong> ${s.value !== null ? s.value : 'N/A'}</li>`).join('')
-                            : '<li>No detailed stats available.</li>'}
+                          ${matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.away.id) && matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.away.id).statistics
+                            ? matchStatistics.find(s => s.team.id === mostRecentH2HFixtureWithStats.teams.away.id).statistics.map(s => `<li><strong>${s.type}:</strong> ${s.value !== null ? s.value : 'N/A'}</li>`).join('')
+                            : '<li>No detailed stats available for this team.</li>'}
                         </ul>
                       </div>
                     </div>
                 `;
             } else {
-                statsHtml = '<p>No detailed statistics available for the most recent head-to-head match.</p>';
+                // MODIFIED MESSAGE HERE:
+                statsHtml = '<p>No detailed statistics found for any head-to-head matches between these teams. This could be because statistics are not provided by the API for these specific fixtures (e.g., very old, future, or lower-tier matches), or there was an issue fetching them.</p>';
             }
 
-            // Generate Prediction using all collected data
-            const predictionHtml = generatePrediction(a.team.name, b.team.name, a.points, b.points, form1, form2, h2h, matchStatistics);
+            // Pass the `mostRecentH2HFixtureWithStats` object to `generatePrediction` as a new 9th argument
+            const predictionHtml = generatePrediction(a.team.name, b.team.name, a.points, b.points, form1, form2, h2hForDisplay, matchStatistics, mostRecentH2HFixtureWithStats);
 
-            // Construct the final output HTML
             out.innerHTML = `
-                <h2>Standings</h2>
+                <h2>Posición</h2>
                 <p><img src="${a.team.logo}" width="30"> ${a.team.name}: ${a.rank} (${a.points} pts)</p>
                 <p><img src="${b.team.logo}" width="30"> ${b.team.name}: ${b.rank} (${b.points} pts)</p>
 
-                <h2>H2H Matches</h2>
+                <h2>Partidos</h2>
                 ${h2hListHtml}
 
                 ${statsHtml}
 
                 <div class="prediction-section">
-                  <h2>Match Prediction</h2>
+                  <h2>Predicción del partido</h2>
                   ${predictionHtml}
                 </div>
             `;
             drawCharts(form1, form2, a.points, b.points); // Draw charts after all data is ready
         } else {
-            // Error message if standing data is missing for one or both teams
             out.innerHTML = `
-                <h2>Comparison Results</h2>
-                <p>Could not perform a full comparison because standings data for one or both teams could not be found for the selected league and season (${SEASON_TO_FETCH}).</p>
-                <p>Please ensure you have selected valid teams and that data is available for the current season (check your API plan for recent seasons like ${SEASON_TO_FETCH}).</p>
+                <h2>Comparar Resultados</h2>
+                <p>Could not perform a full comparison because standings data for one or both teams could not be found for the selected league and season (${season}).</p>
+                <p>Please ensure you have selected valid teams and that data is available for the current season/your API key plan.</p>
             `;
-            // Destroy charts if data is incomplete
             if (formChartInstance) formChartInstance.destroy();
             if (pointsChartInstance) pointsChartInstance.destroy();
         }
 
     } catch (error) {
-        // General error handling for any issues during the comparison process
         console.error("Error during comparison:", error);
         out.innerHTML = `
-            <h2>Comparison Error</h2>
+            <h2>Error de Comparación</h2>
             <p>An unexpected error occurred while fetching data for comparison. Please try again.</p>
             <p>Details: ${error.message}. Please verify your API key and network connection.</p>
         `;
-        // Destroy charts on critical error
         if (formChartInstance) formChartInstance.destroy();
         if (pointsChartInstance) pointsChartInstance.destroy();
     }
 }
 
-// Initial call to populate the league dropdown when the page loads
+// Initial call to populate the league and season dropdowns when the page loads
 initialLoad();
