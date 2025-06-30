@@ -267,32 +267,94 @@
   text-align: center;
   margin-top: 15px;
 }
+/* Styles for H2H Grid Display */
+.h2h-grid {
+    display: grid;
+    /* This creates columns that are at least 200px wide, and as many as can fit (up to 4 on wide screens) */
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px; /* Space between items */
+    padding: 10px;
+    background-color: #f4f4f4; /* Light background for the grid area */
+    border-radius: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05); /* Soft shadow for the container */
+}
+
+.h2h-item {
+    background-color: #ffffff; /* White background for each match item */
+    padding: 10px 15px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-size: 0.9em;
+    display: flex;
+    flex-direction: column; /* Stack name and date */
+    align-items: flex-start;
+    justify-content: center;
+    text-align: left;
+    white-space: nowrap; /* Prevent wrapping team names */
+    overflow: hidden; /* Hide overflow if names are too long */
+    text-overflow: ellipsis; /* Add ellipsis for long names */
+    border: 1px solid #ddd; /* Subtle border */
+}
+
+.h2h-item .h2h-date {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 2px;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 992px) { /* Adjust for medium screens */
+    .h2h-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 768px) { /* Adjust for tablets */
+    .h2h-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+}
+
+@media (max-width: 480px) { /* Adjust for mobile phones */
+    .h2h-grid {
+        grid-template-columns: 1fr; /* Single column on very small screens */
+    }
+    .h2h-item {
+        white-space: normal; /* Allow text to wrap on very small screens */
+        text-overflow: unset; /* Remove ellipsis */
+    }
+}
 
   </style>
 </head>
 <body>
-  <h1>Live Team Comparator</h1>
+  <h1>Estadisticas de Ligas</h1>
 
   <div class="controls">
-    <label for="league">League:</label>
+    <label for="league">Ligas:</label>
     <select id="league" onchange="loadTeams()">
-      <option value="39">Premier League</option>
-      <option value="61">Ligue 1</option>
-      <option value="78">Bundesliga</option>
-      </select>
+      <option value="">Cargando Ligas...</option> 
+    </select>
 
-    <label for="team1">Team 1:</label>
-    <select id="team1"></select>
+    <label for="season">Temporada:</label>
+    <select id="season" onchange="loadTeams()">
+        <option value="">Cargando Temporadas...</option>
+    </select>
+    <label for="team1">Equipo 1:</label>
+    <select id="team1">
+        <option value="">Selecciona un equipo</option>
+    </select>
 
-    <label for="team2">Team 2:</label>
-    <select id="team2"></select>
+    <label for="team2">Equipo 2:</label>
+    <select id="team2">
+        <option value="">Selecciona un equipo</option>
+    </select>
 
-    <button onclick="compare()">Compare</button>
+    <button onclick="compare()">Comparar</button>
   </div>
-
   <div id="output">
-    <p>Select two teams and click 'Compare' to see their stats!</p>
-  </div>
+    <p>Selecciona una Liga, Temporada, y dos equipos para comparar!</p> </div>
   <div id="charts">
     <canvas id="formChart"></canvas>
     <canvas id="pointsChart"></canvas>
